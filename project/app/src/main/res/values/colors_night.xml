@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="green_on_primary_dark">#003913</color>
+    <color name="green_primary_container_dark">#1B5E20</color>
+    <color name="green_on_primary_container_dark">#C8E6C9</color>
+
+    <color name="green_on_secondary_dark">#103828</color>
+    <color name="green_secondary_container_dark">#2E7D32</color>
+    <color name="green_on_secondary_container_dark">#E8F5E9</color>
+
+    <color name="background_dark">#1A1C19</color>
+    <color name="on_background_dark">#E2E3DD</color>
+    <color name="surface_dark">#1A1C19</color>
+    <color name="on_surface_dark">#E2E3DD</color>
+    <color name="surface_variant_dark">#424940</color>
+    <color name="on_surface_variant_dark">#C2C9BF</color>
+
+    <color name="outline_dark">#8C948A</color>
+</resources>

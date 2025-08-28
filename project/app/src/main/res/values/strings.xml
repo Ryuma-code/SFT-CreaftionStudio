@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">EcotionBuddy</string>
+    <string name="app_tagline">Mengubah Sampah, Menyelamatkan Bumi</string>
+
+    <string name="title_home">Beranda</string>
+    <string name="title_ask_ai">Tanya AI</string>
+    <string name="title_history">Riwayat</string>
+    <string name="title_account">Akun</string>
+
+    <string name="greeting_format">Hai, %s!</string>
+    <string name="welcome_subtitle">Selamat datang di EcotionBuddy</string>
+    <string name="your_points">Poin Kamu</string>
+    <string name="points_format">%,d</string>
+    <string name="level_format">Level %d</string>
+    <string name="special_mission">Misi Spesial Untukmu</string>
+    <string name="start_mission">Jalankan Misi!</string>
+    <string name="ask_ai">Tanya AI</string>
+    <string name="scan_waste">Scan Sampah</string>
+
+    <string name="scan_title">Pindai Sampah</string>
+    <string name="camera_hint">Arahkan kamera ke sampah</string>
+    <string name="scan_button_desc">Pindai Sampah</string>
+    <string name="gallery_button_desc">Pilih dari Galeri</string>
+    <string name="flash_toggle_desc">Nyalakan/Matikan Flash</string>
+    <string name="back_button_desc">Kembali</string>
+
+    <string name="scan_result_title">Hasil Pemindaian</string>
+    <string name="detection_result">Hasil Deteksi</string>
+    <string name="category_label">Kategori:</string>
+    <string name="confidence_label">Tingkat Keyakinan:</string>
+    <string name="confidence_format">%d%% yakin</string>
+    <string name="points_earned_label">Poin Diperoleh:</string>
+    <string name="points_earned_format">+%d Poin</string>
+    <string name="recycling_suggestions">Saran Daur Ulang</string>
+    <string name="view_details">Lihat Langkah Detail</string>
+
+    <string name="ai_chat_title">Tanya AI Ecotion</string>
+    <string name="message_hint">Ketik pesanmu...</string>
+    <string name="send_message">Kirim</string>
+    <string name="attach_file">Lampirkan File</string>
+    <string name="ai_welcome_message">Halo! Saya AI Ecotion. Ada yang bisa saya bantu terkait pengelolaan sampah?</string>
+
+    <string name="history_title">Riwayat Statistik</string>
+    <string name="points_statistics">Statistik Poin</string>
+    <string name="tab_weekly">Mingguan</string>
+    <string name="tab_monthly">Bulanan</string>
+    <string name="tab_all">Semua</string>
+    <string name="completed_missions">Riwayat Misi Selesai</string>
+    <string name="completion_date_format">Selesai: %s</string>
+
+    <string name="account_title">Akun Saya</string>
+    <string name="total_points_format">Total Poin: %,d</string>
+    <string name="activity_history">Riwayat Aktivitas</string>
+    <string name="edit_profile">Edit Profil</string>
+    <string name="settings">Pengaturan</string>
+    <string name="privacy_policy">Kebijakan &amp; Privasi</string>
+    <string name="logout">Keluar</string>
+
+    <string name="category_plastic">Plastik</string>
+    <string name="category_organic">Organik</string>
+    <string name="category_paper">Kertas</string>
+    <string name="category_metal">Logam</string>
+    <string name="category_glass">Kaca</string>
+    <string name="category_electronic">Elektronik</string>
+    <string name="category_textile">Tekstil</string>
+
+    <string name="mission_collect_plastic">Kumpulkan Sampah Plastik</string>
+    <string name="mission_scan_waste">Pindai Sampah</string>
+    <string name="mission_recycle_items">Daur Ulang Barang</string>
+    <string name="mission_description_plastic">Ayo kumpulkan sampah plastik yang ada di sekitar rumahmu untuk mendapatkan poin tambahan!</string>
+
+    <string name="suggestion_plastic_pot_title">Botol Plastik Menjadi Pot Tanaman</string>
+    <string name="suggestion_plastic_pot_desc">Ubah botol plastik bekas menjadi pot tanaman yang cantik</string>
+    <string name="suggestion_piggy_bank_title">Celengan dari Botol Plastik</string>
+    <string name="suggestion_piggy_bank_desc">Buat celengan unik dari botol plastik bekas</string>
+    <string name="difficulty_easy">Mudah</string>
+    <string name="difficulty_medium">Sedang</string>
+    <string name="difficulty_hard">Sulit</string>
+    <string name="time_30_minutes">30 menit</string>
+    <string name="time_20_minutes">20 menit</string>
+
+    <string name="action_scan">Pindai</string>
+    <string name="action_start_mission">Mulai Misi</string>
+    <string name="action_view_details">Lihat Detail</string>
+    <string name="action_share">Bagikan</string>
+    <string name="action_save">Simpan</string>
+    <string name="action_cancel">Batal</string>
+    <string name="action_continue">Lanjutkan</string>
+    <string name="action_ok">OK</string>
+
+    <string name="message_scan_success">Pemindaian berhasil!</string>
+    <string name="message_mission_completed">Misi selesai! Anda mendapat %d poin</string>
+    <string name="message_level_up">Selamat! Anda naik ke level %d</string>
+    <string name="message_camera_permission_required">Izin kamera diperlukan untuk memindai sampah</string>
+    <string name="message_processing">Memproses...</string>
+
+    <string name="error_camera_failed">Gagal memulai kamera</string>
+    <string name="error_image_capture_failed">Gagal mengambil foto</string>
+    <string name="error_network">Tidak ada koneksi internet</string>
+    <string name="error_general">Terjadi kesalahan. Silakan coba lagi</string>
+    <string name="error_permission_denied">Izin ditolak</string>
+
+    <string name="toggle_flash_description">Nyalakan atau Matikan Flash</string>
+    <string name="placeholder_chart_description">Placeholder untuk grafik statistik</string>
+    <string name="mission_image_description">Gambar misi</string>
+    <string name="profile_image_description">Foto profil</string>
+    <string name="points_icon_description">Ikon poin</string>
+
+    <plurals name="plural_days_left">
+        <item quantity="one">%d hari lagi</item>
+        <item quantity="other">%d hari lagi</item>
+    </plurals>
+
+</resources>

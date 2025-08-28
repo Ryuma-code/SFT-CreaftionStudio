@@ -1,0 +1,40 @@
+# === Python backend (FastAPI) ===
+backend/__pycache__/
+backend/.venv/
+backend/.mypy_cache/
+backend/.pytest_cache/
+backend/*.py[cod]
+backend/.coverage
+backend/*.log
+
+# ENV files (do not commit secrets)
+.env
+.env.*
+*.env
+
+# === Android (project/) ===
+project/local.properties
+project/.idea/
+project/.gradle/
+project/build/
+project/app/build/
+project/.cxx/
+project/**/*.iml
+project/**/captures/
+project/**/outputs/
+project/**/*.apk
+project/**/*.aab
+
+# If any top-level Gradle build dirs appear
+.gradle/
+build/
+
+# === ESP32 / PlatformIO ===
+esp32/.pio/
+esp32/.vscode/
+
+# === OS / Editor ===
+.DS_Store
+Thumbs.db
+*.swp
+*.swo

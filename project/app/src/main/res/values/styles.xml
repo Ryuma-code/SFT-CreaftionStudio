@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Account Menu Item Style -->
+    <style name="AccountMenuItem">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:padding">@dimen/padding_medium</item>
+        <item name="android:textAppearance">?attr/textAppearanceBodyLarge</item>
+        <item name="android:textColor">?attr/colorOnSurface</item>
+        <item name="android:background">?attr/selectableItemBackground</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:drawableTint">?attr/colorOnSurfaceVariant</item>
+    </style>
+
+    <!-- Circular Background Style -->
+    <style name="CircleImageBackground">
+        <item name="android:shape">oval</item>
+        <item name="android:color">?attr/colorSurfaceVariant</item>
+    </style>
+
+    <!-- Chat Message Styles -->
+    <style name="ChatMessageUser">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_gravity">end</item>
+        <item name="android:background">@drawable/background_chat_user</item>
+        <item name="android:paddingHorizontal">@dimen/padding_medium</item>
+        <item name="android:paddingVertical">@dimen/spacing_md</item>
+        <item name="android:textColor">?attr/colorOnPrimaryContainer</item>
+        <item name="android:textAppearance">?attr/textAppearanceBodyMedium</item>
+    </style>
+
+    <style name="ChatMessageBot">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_gravity">start</item>
+        <item name="android:background">@drawable/background_chat_bot</item>
+        <item name="android:paddingHorizontal">@dimen/padding_medium</item>
+        <item name="android:paddingVertical">@dimen/spacing_md</item>
+        <item name="android:textColor">?attr/colorOnSurface</item>
+        <item name="android:textAppearance">?attr/textAppearanceBodyMedium</item>
+    </style>
+
+    <!-- Mission Card Style -->
+    <style name="MissionCard" parent="Widget.App.CardView">
+        <item name="cardCornerRadius">@dimen/card_corner_radius</item>
+        <item name="cardElevation">@dimen/card_elevation</item>
+        <item name="android:layout_marginBottom">@dimen/spacing_md</item>
+    </style>
+
+    <!-- Chip Styles -->
+    <style name="ChipCategory" parent="Widget.App.Chip">
+        <item name="chipBackgroundColor">?attr/colorSecondaryContainer</item>
+        <item name="android:textColor">?attr/colorOnSecondaryContainer</item>
+    </style>
+
+    <style name="ChipPoints" parent="Widget.App.Chip">
+        <item name="chipBackgroundColor">?attr/colorTertiaryContainer</item>
+        <item name="android:textColor">?attr/colorOnTertiaryContainer</item>
+        <item name="chipIcon">@drawable/ic_points_gem</item>
+    </style>
+
+</resources>

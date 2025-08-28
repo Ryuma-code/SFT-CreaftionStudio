@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Material Design 3 Green Theme Colors -->
+    
+    <!-- Primary Colors -->
+    <color name="green_primary">#4CAF50</color>
+    <color name="green_primary_dark">#2E7D32</color>
+    <color name="green_primary_light">#81C784</color>
+    <color name="green_primary_variant">#388E3C</color>
+    
+    <!-- Secondary Colors -->
+    <color name="green_secondary">#66BB6A</color>
+    <color name="green_secondary_dark">#4CAF50</color>
+    <color name="green_secondary_light">#A5D6A7</color>
+    
+    <!-- Accent Colors -->
+    <color name="accent_orange">#FF5722</color>
+    <color name="accent_orange_dark">#D84315</color>
+    <color name="accent_orange_light">#FF8A65</color>
+    
+    <!-- Surface Colors -->
+    <color name="surface_light">#FFFFFF</color>
+    <color name="surface_variant">#F1F8E9</color>
+    <color name="surface_container">#E8F5E8</color>
+    
+    <!-- Background Colors -->
+    <color name="background_light">#F8FAF0</color>
+    <color name="background_green_light">#E8F5E8</color>
+    
+    <!-- Text Colors -->
+    <color name="text_primary">#1B5E20</color>
+    <color name="text_secondary">#2E7D32</color>
+    <color name="text_on_primary">#FFFFFF</color>
+    <color name="text_on_surface">#1A1C19</color>
+    <color name="text_hint">#757575</color>
+    
+    <!-- Status Colors -->
+    <color name="success">#4CAF50</color>
+    <color name="warning">#FF9800</color>
+    <color name="error">#F44336</color>
+    <color name="info">#2196F3</color>
+    
+    <!-- Neutral Colors -->
+    <color name="white">#FFFFFF</color>
+    <color name="black">#000000</color>
+    <color name="gray_50">#FAFAFA</color>
+    <color name="gray_100">#F5F5F5</color>
+    <color name="gray_200">#EEEEEE</color>
+    <color name="gray_300">#E0E0E0</color>
+    <color name="gray_400">#BDBDBD</color>
+    <color name="gray_500">#9E9E9E</color>
+    <color name="gray_600">#757575</color>
+    <color name="gray_700">#616161</color>
+    <color name="gray_800">#424242</color>
+    <color name="gray_900">#212121</color>
+    
+    <!-- Outline Colors -->
+    <color name="outline">#727970</color>
+    <color name="outline_variant">#C2C9BF</color>
+    
+    <!-- Legacy Colors for Compatibility -->
+    <color name="purple_200">#FFBB86FC</color>
+    <color name="purple_500">#FF6200EE</color>
+    <color name="purple_700">#FF3700B3</color>
+    <color name="teal_200">#FF03DAC5</color>
+    <color name="teal_700">#FF018786</color>
+    <color name="placeholder_chart_icon_color">#757575</color>
+    <color name="placeholder_grey">#CCCCCC</color>
+</resources>

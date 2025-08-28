@@ -1,0 +1,6 @@
+fastapi
+uvicorn[standard]
+motor
+python-dateutil
+asyncio-mqtt
+python-jose[cryptography]
