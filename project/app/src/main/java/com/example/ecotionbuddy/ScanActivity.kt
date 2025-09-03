@@ -17,6 +17,12 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.example.ecotionbuddy.databinding.ActivityScanBinding
 import com.example.ecotionbuddy.ui.scan.ScanResultActivity
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
+import com.example.ecotionbuddy.data.network.RetrofitClient
+import com.example.ecotionbuddy.data.network.dto.AndroidEventDto
+import com.example.ecotionbuddy.utils.PreferencesManager
+
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
@@ -157,6 +163,7 @@ class ScanActivity : AppCompatActivity() {
                     binding.scanButton.isEnabled = true
                     
                     output.savedUri?.let { uri ->
+                        sendScanEvent(uri)
                         processImage(uri)
                     }
                 }
@@ -185,9 +192,27 @@ class ScanActivity : AppCompatActivity() {
     }
     
     private fun processImageFromGallery(imageUri: Uri) {
+        sendScanEvent(imageUri)
         processImage(imageUri)
     }
     
+    private fun sendScanEvent(imageUri: Uri) {
+        val userId = PreferencesManager(this).userId ?: "guest"
+        lifecycleScope.launch {
+            try {
+                RetrofitClient.api.postAndroidEvent(
+                    AndroidEventDto(
+                        userId = userId,
+                        action = "scan_photo_saved",
+                        payload = mapOf("imageUri" to imageUri.toString())
+                    )
+                )
+            } catch (_: Exception) {
+                // ignore network errors for now
+            }
+        }
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         cameraExecutor.shutdown()

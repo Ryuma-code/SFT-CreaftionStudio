@@ -3,11 +3,13 @@ import asyncio
 import contextlib
 import logging
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Any, Dict, List
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
 
 from .mqtt_worker import MQTTWorker
@@ -58,6 +60,20 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="EcotionBuddy Backend", version="0.1.0", lifespan=lifespan)
 
+# CORS for Android app and IoT devices
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Static uploads mount
+UPLOADS_DIR = os.getenv("UPLOADS_DIR", "uploads")
+os.makedirs(UPLOADS_DIR, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=UPLOADS_DIR), name="uploads")
+
 
 class ClaimRequest(BaseModel):
     userId: str
@@ -87,3 +103,87 @@ async def claim(req: ClaimRequest):
     }
     await app.state.db.claims.insert_one(doc)
     return {"awardedPoints": points, "status": "ok"}
+
+
+# ===== IoT Camera and Android integration =====
+
+class IoTCameraResult(BaseModel):
+    deviceId: Optional[str] = Field(default=None)
+    binId: Optional[str] = Field(default=None)
+    label: str
+    confidence: float
+    imageUrl: Optional[str] = Field(default=None)
+    extra: Optional[Dict[str, Any]] = Field(default=None)
+
+
+class AndroidEvent(BaseModel):
+    userId: str
+    action: str
+    binId: Optional[str] = Field(default=None)
+    payload: Optional[Dict[str, Any]] = Field(default=None)
+
+
+@app.post("/iot/camera/upload", tags=["iot"])  # Content-Type: image/jpeg, raw body
+async def iot_camera_upload(request: Request, deviceId: Optional[str] = None, binId: Optional[str] = None):
+    try:
+        data = await request.body()
+        if not data:
+            raise HTTPException(status_code=400, detail="Empty body")
+        ts = datetime.utcnow()
+        fname = ts.strftime("%Y%m%dT%H%M%S%f") + ".jpg"
+        fpath = os.path.join(UPLOADS_DIR, fname)
+        with open(fpath, "wb") as f:
+            f.write(data)
+
+        doc = {
+            "deviceId": deviceId,
+            "binId": binId,
+            "filename": fname,
+            "path": fpath,
+            "url": f"/uploads/{fname}",
+            "size": len(data),
+            "contentType": "image/jpeg",
+            "ts": ts,
+            "origin": "iot",
+        }
+        await app.state.db.images.insert_one(doc)
+        return {"status": "ok", "url": doc["url"], "size": doc["size"], "deviceId": deviceId, "binId": binId}
+    except HTTPException:
+        raise
+    except Exception as e:  # noqa: BLE001
+        logging.exception("Upload failed: %s", e)
+        raise HTTPException(status_code=500, detail="Upload failed")
+
+
+@app.post("/iot/camera/result", tags=["iot"])  # JSON event from ESP32-CAM (placeholder or real)
+async def iot_camera_result(evt: IoTCameraResult):
+    doc = evt.model_dump()
+    doc["origin"] = "iot"
+    doc["ts"] = datetime.utcnow()
+    await app.state.db.events.insert_one(doc)
+    return {"status": "ok"}
+
+
+@app.post("/events", tags=["android"])  # Generic Android event
+async def post_event(evt: AndroidEvent):
+    doc = evt.model_dump()
+    doc["origin"] = "android"
+    doc["ts"] = datetime.utcnow()
+    await app.state.db.events.insert_one(doc)
+    return {"status": "ok"}
+
+
+@app.get("/events/latest", tags=["events"])  # Fetch recent events for app UI
+async def get_latest_events(limit: int = 50):
+    if limit <= 0:
+        limit = 1
+    if limit > 200:
+        limit = 200
+    cursor = app.state.db.events.find().sort("ts", -1).limit(limit)
+    docs: List[Dict[str, Any]] = await cursor.to_list(length=limit)
+    for d in docs:
+        if "_id" in d:
+            d["_id"] = str(d["_id"])  # make JSON serializable
+        if isinstance(d.get("ts"), datetime):
+            d["ts"] = d["ts"].isoformat()
+    return {"items": docs, "count": len(docs)}
