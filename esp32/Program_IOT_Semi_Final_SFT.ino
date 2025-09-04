@@ -112,6 +112,7 @@ void takeAndSendPhoto() {
     return;
   }
   sendLog("INFO: Gambar diambil. Ukuran: " + String(fb->len) + " bytes");
+  String uploadedUrl = ""; // URL gambar yang dikembalikan backend
   // Kirim gambar ke backend dengan deviceId & binId dalam query string
   HTTPClient http;
   String uploadUrl = String(http_server_url) + "?deviceId=" + DEVICE_ID + "&binId=" + BIN_ID;
@@ -120,6 +121,16 @@ void takeAndSendPhoto() {
   int httpResponseCode = http.POST(fb->buf, fb->len);
   if (httpResponseCode > 0) {
     sendLog("INFO: HTTP POST ke server berhasil (kode: " + String(httpResponseCode) + ")");
+    // Coba baca response JSON dan ambil field `url`
+    String resp = http.getString();
+    StaticJsonDocument<256> respDoc;
+    DeserializationError jerr = deserializeJson(respDoc, resp);
+    if (!jerr) {
+      const char* url = respDoc["url"] | "";
+      if (url && strlen(url) > 0) {
+        uploadedUrl = String(url);
+      }
+    }
   } else {
     sendLog("ERROR: HTTP POST ke server gagal: " + http.errorToString(httpResponseCode));
   }
@@ -132,6 +143,9 @@ void takeAndSendPhoto() {
     ev["binId"] = BIN_ID;
     ev["label"] = "placeholder";     // TODO: ganti dengan label model CNN asli
     ev["confidence"] = 0.0;            // TODO: ganti dengan confidence asli
+    if (uploadedUrl.length() > 0) {
+      ev["imageUrl"] = uploadedUrl;
+    }
     char payload[256];
     size_t n = serializeJson(ev, payload, sizeof(payload));
     if (mqttClient.publish(MQTT_TOPIC_EVENT, (uint8_t*)payload, n)) {
@@ -151,6 +165,9 @@ void takeAndSendPhoto() {
     ev2["binId"] = BIN_ID;
     ev2["label"] = "placeholder";
     ev2["confidence"] = 0.0;
+    if (uploadedUrl.length() > 0) {
+      ev2["imageUrl"] = uploadedUrl;
+    }
     String body;
     serializeJson(ev2, body);
     int code2 = http2.POST(body);
