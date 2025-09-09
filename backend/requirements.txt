@@ -4,3 +4,4 @@ motor
 python-dateutil
 asyncio-mqtt
 python-jose[cryptography]
+python-telegram-bot>=21.0.0,<22.0.0

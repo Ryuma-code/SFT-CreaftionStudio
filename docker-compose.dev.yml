@@ -21,9 +21,14 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - MONGO_URI=mongodb://mongo:27017/ecotionbuddy
-      - MQTT_HOST=mqtt
-      - MQTT_PORT=1883
+      - MONGO_URI=${MONGO_URI:-mongodb://mongo:27017/ecotionbuddy}
+      - MQTT_HOST=${MQTT_HOST:-mqtt}
+      - MQTT_PORT=${MQTT_PORT:-1883}
+      - IMAGE_STORAGE=${IMAGE_STORAGE:-disk}
+      - UPLOADS_DIR=${UPLOADS_DIR:-uploads}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
+      - MIRROR_SHARE_PATH=${MIRROR_SHARE_PATH:-}
     depends_on:
       - mqtt
       - mongo
