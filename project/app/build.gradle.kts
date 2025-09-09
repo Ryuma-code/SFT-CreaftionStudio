@@ -27,11 +27,16 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
-        buildConfigField("String", "BASE_URL", "\"http://10.0.2.2:8000/\"")
+        // Default to stable public domain so APKs work without IP changes.
+        buildConfigField("String", "BASE_URL", "\"https://ecotionbuddy.ecotionbuddy.com/\"")
         buildConfigField("String", "GEMINI_API_KEY", "\"${GEMINI_API_KEY}\"")
     }
 
     buildTypes {
+        debug {
+            // For Android emulator local dev, 10.0.2.2 maps to host's localhost
+            buildConfigField("String", "BASE_URL", "\"http://10.0.2.2:8000/\"")
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(

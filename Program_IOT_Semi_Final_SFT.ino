@@ -34,9 +34,9 @@ const char* WIFI_PASS = "Grey12345";
 #define CHAT_ID "6889536350"
 
 // --- Konfigurasi Server Penerima Gambar & MQTT ---
-// PENTING: Pastikan IP ini adalah alamat IP laptop Anda di jaringan "GREY".
-const char* http_server_url = "http://192.168.137.1:5000/upload";
-const char* MQTT_SERVER = "192.168.137.1";
+// Gunakan domain stabil untuk HTTP API (via Cloudflare Tunnel). MQTT tetap LAN.
+const char* http_server_url = "https://ecotionbuddy.ecotionbuddy.com/iot/camera/upload";
+const char* MQTT_SERVER = "192.168.1.144"; // sesuaikan broker LAN Anda jika berbeda
 const int   MQTT_PORT   = 1883;
 const char* MQTT_USER   = "";
 const char* MQTT_PASS   = "";
@@ -106,7 +106,8 @@ void takeAndSendPhoto() {
   }
   sendLog("INFO: Gambar diambil. Ukuran: " + String(fb->len) + " bytes");
   HTTPClient http;
-  http.begin(http_server_url);
+  // gunakan WiFiClientSecure 'client' agar bisa HTTPS tanpa validasi sertifikat (dev)
+  http.begin(client, http_server_url);
   http.addHeader("Content-Type", "image/jpeg");
   int httpResponseCode = http.POST(fb->buf, fb->len);
   if (httpResponseCode > 0) {

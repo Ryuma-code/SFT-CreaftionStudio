@@ -57,6 +57,11 @@ MIRROR_SHARE_PATH = os.getenv("MIRROR_SHARE_PATH") or os.getenv("TARGET_PC_FOLDE
 # Image storage backend: "disk" (default) or "gridfs"
 IMAGE_STORAGE = os.getenv("IMAGE_STORAGE", "disk").lower()
 
+# Public endpoints/hosts for external clients (Android/ESP32) to discover
+PUBLIC_API_BASE = os.getenv("PUBLIC_API_BASE")  # e.g. https://ecotionbuddy.ecotionbuddy.com/
+PUBLIC_MQTT_HOST = os.getenv("PUBLIC_MQTT_HOST")  # e.g. 192.168.1.144
+PUBLIC_MQTT_PORT = int(os.getenv("PUBLIC_MQTT_PORT", os.getenv("MQTT_PORT", "1883")))
+
 
 async def _send_telegram_photo(local_path: str, caption: str) -> bool:
     if not (TELEGRAM_ENABLED and TELEGRAM_AVAILABLE and TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID):
@@ -419,6 +424,19 @@ async def get_latest_events(limit: int = 50):
         if isinstance(d.get("ts"), datetime):
             d["ts"] = d["ts"].isoformat()
     return {"items": docs, "count": len(docs)}
+
+
+@app.get("/config", tags=["meta"])  # Public config for mobile/ESP32 discovery
+async def get_public_config(request: Request):
+    # Derive API base from forwarded host if available, else from env or request
+    host = request.headers.get("x-forwarded-host") or request.headers.get("host")
+    scheme = request.headers.get("x-forwarded-proto") or request.url.scheme
+    api_base = PUBLIC_API_BASE or (f"{scheme}://{host}/" if host else str(request.base_url))
+    return {
+        "apiBase": api_base,
+        "mqttHost": PUBLIC_MQTT_HOST or getattr(app.state, "mqtt_host", "mqtt"),
+        "mqttPort": PUBLIC_MQTT_PORT,
+    }
 
 
 def _jsonify_id(doc: Dict[str, Any]) -> Dict[str, Any]:

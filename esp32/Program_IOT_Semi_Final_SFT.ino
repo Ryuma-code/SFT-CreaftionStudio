@@ -34,11 +34,10 @@ const char* WIFI_PASS = "Grey12345";
 #define CHAT_ID "6889536350"
 
 // --- Konfigurasi Server Penerima Gambar & MQTT ---
-// PENTING: Pastikan IP ini adalah alamat IP backend FastAPI Anda.
-// Default mengarah ke backend pada port 8000 (docker-compose.dev.yml)
-const char* http_server_url = "http://192.168.137.252:8000/iot/camera/upload"; // kirim JPEG mentah (POST)
-const char* HTTP_RESULT_URL = "http://192.168.137.252:8000/iot/camera/result";  // kirim event JSON (POST)
-const char* MQTT_SERVER = "192.168.137.252";
+// Gunakan domain stabil untuk HTTP API (via Cloudflare Tunnel). MQTT tetap LAN.
+const char* http_server_url = "https://ecotionbuddy.ecotionbuddy.com/iot/camera/upload"; // kirim JPEG mentah (POST)
+const char* HTTP_RESULT_URL = "https://ecotionbuddy.ecotionbuddy.com/iot/camera/result";  // kirim event JSON (POST)
+const char* MQTT_SERVER = "192.168.137.252"; // broker MQTT lokal (tetap LAN)
 const int   MQTT_PORT   = 1883;
 const char* MQTT_USER   = "";
 const char* MQTT_PASS   = "";
@@ -174,7 +173,8 @@ void takeAndSendPhoto() {
   // Kirim gambar ke backend dengan deviceId & binId dalam query string
   HTTPClient http;
   String uploadUrl = String(http_server_url) + "?deviceId=" + DEVICE_ID + "&binId=" + BIN_ID;
-  http.begin(uploadUrl);
+  // gunakan WiFiClientSecure 'client' yang sudah setInsecure() untuk HTTPS
+  http.begin(client, uploadUrl);
   http.addHeader("Content-Type", "image/jpeg");
   http.setTimeout(15000); // perbesar timeout total agar tidak cepat gagal ketika jaringan lambat
   int httpResponseCode = http.POST(fb->buf, fb->len);
@@ -217,7 +217,8 @@ void takeAndSendPhoto() {
   // Kirim juga event JSON ke backend via HTTP sebagai backup (opsional)
   {
     HTTPClient http2;
-    http2.begin(HTTP_RESULT_URL);
+    // gunakan WiFiClientSecure 'client' untuk HTTPS
+    http2.begin(client, HTTP_RESULT_URL);
     http2.addHeader("Content-Type", "application/json");
     http2.setTimeout(8000); // timeout moderat untuk event JSON
     StaticJsonDocument<256> ev2;
