@@ -9,12 +9,37 @@ import android.view.MenuItem
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.example.ecotionbuddy.databinding.ActivityChatbotBinding // Ganti dengan package project Anda
+import androidx.lifecycle.lifecycleScope
+import com.example.ecotionbuddy.BuildConfig
+import com.example.ecotionbuddy.data.network.gemini.GeminiClient
+import com.example.ecotionbuddy.data.network.gemini.GeminiContent
+import com.example.ecotionbuddy.data.network.gemini.GeminiPart
+import com.example.ecotionbuddy.data.network.gemini.GeminiRequest
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class ChatbotActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityChatbotBinding
     private lateinit var chatAdapter: ChatAdapter
     private val messageList = mutableListOf<ChatMessage>()
+
+    // Model Gemini dan prompt sistem yang fokus pada keberlanjutan lingkungan & manajemen sampah
+    private val geminiModel = "gemini-1.5-flash"
+    private val systemPrompt = """
+        You are EcoBuddy, an expert assistant focused on environmental sustainability and waste management.
+        Objectives:
+        - Give practical, localized, respectful guidance on how to reduce, reuse, and recycle.
+        - Teach source separation (organic, plastic, paper, glass, metal, e-waste) and contamination risks.
+        - Explain why a material belongs to a bin type and common mistakes to avoid.
+        - Encourage behavior change with actionable tips and short checklists.
+        - When uncertain, ask clarifying questions (e.g., material type, residue, labels).
+        Constraints:
+        - Keep answers concise and structured with short bullets.
+        - Prefer simple language; avoid jargon.
+        - If asked about program points or bin compatibility, refer to the app’s session flow and local rules.
+    """.trimIndent()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -60,8 +85,8 @@ class ChatbotActivity : AppCompatActivity() {
                 addMessageToChat(userMessage, Sender.USER)
                 binding.messageInput.text?.clear()
 
-                // Simulasikan balasan dari bot
-                simulateBotResponse()
+                // Panggil Gemini untuk mendapatkan balasan
+                chatWithGemini()
             }
         }
     }
@@ -75,11 +100,58 @@ class ChatbotActivity : AppCompatActivity() {
         binding.chatRecyclerView.scrollToPosition(chatAdapter.itemCount - 1)
     }
 
-    private fun simulateBotResponse() {
-        // Tunda balasan bot agar terasa seperti sedang berpikir
-        Handler(Looper.getMainLooper()).postDelayed({
-            addMessageToChat("Terima kasih atas pertanyaan Anda. Saya sedang memprosesnya...", Sender.BOT)
-        }, 1500) // Tunda 1.5 detik
+    private fun chatWithGemini() {
+        val apiKey = BuildConfig.GEMINI_API_KEY
+        if (apiKey.isBlank()) {
+            addMessageToChat("Konfigurasi API key belum diatur. Tambahkan GEMINI_API_KEY di local.properties.", Sender.BOT)
+            return
+        }
+
+        // Tampilkan pesan "sedang mengetik"
+        addMessageToChat("Memikirkan jawaban terbaik untukmu...", Sender.BOT)
+
+        // Susun percakapan untuk Gemini: gabungkan prompt sistem + riwayat chat
+        val contents = buildContentsFromHistory()
+
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val request = GeminiRequest(contents = contents)
+                val resp = GeminiClient.api.generateContent(
+                    model = geminiModel,
+                    apiKey = apiKey,
+                    body = request
+                )
+
+                val text = resp.candidates
+                    ?.firstOrNull()
+                    ?.content
+                    ?.parts
+                    ?.firstOrNull()
+                    ?.text
+                    ?.trim()
+                    ?: "Maaf, saya tidak menemukan jawaban saat ini. Coba tanyakan dengan cara berbeda."
+
+                withContext(Dispatchers.Main) {
+                    addMessageToChat(text, Sender.BOT)
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    addMessageToChat("Terjadi kesalahan memanggil model: ${e.localizedMessage}", Sender.BOT)
+                }
+            }
+        }
+    }
+
+    private fun buildContentsFromHistory(): List<GeminiContent> {
+        val list = mutableListOf<GeminiContent>()
+        // Masukkan prompt sistem sebagai konteks awal
+        list += GeminiContent(role = "user", parts = listOf(GeminiPart(text = systemPrompt)))
+        // Masukkan riwayat percakapan: mapping Sender.USER -> role "user", Sender.BOT -> role "model"
+        messageList.forEach { msg ->
+            val role = if (msg.sender == Sender.USER) "user" else "model"
+            list += GeminiContent(role = role, parts = listOf(GeminiPart(text = msg.message)))
+        }
+        return list
     }
 
     // Fungsi untuk tombol kembali di toolbar

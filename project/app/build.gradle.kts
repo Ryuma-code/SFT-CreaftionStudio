@@ -4,6 +4,13 @@ plugins {
     id("kotlin-kapt")
 }
 
+// Load local.properties for secrets (e.g., GEMINI_API_KEY)
+val localProps = java.util.Properties().apply {
+    val f = rootProject.file("local.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+val GEMINI_API_KEY: String = localProps.getProperty("GEMINI_API_KEY", "")
+
 android {
     namespace = "com.example.ecotionbuddy"
     compileSdk = 35
@@ -21,6 +28,7 @@ android {
             useSupportLibrary = true
         }
         buildConfigField("String", "BASE_URL", "\"http://10.0.2.2:8000/\"")
+        buildConfigField("String", "GEMINI_API_KEY", "\"${GEMINI_API_KEY}\"")
     }
 
     buildTypes {
