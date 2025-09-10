@@ -1,9 +1,12 @@
 /* EcotionBuddy - Kontrol Penuh via Telegram (Perbaikan Final)
-   -------------------------------------------------------------
-   PERBAIKAN FINAL:
-   - Mengubah cara pemeriksaan pesan Telegram menjadi non-blocking
-     untuk mencegah program macet jika ada masalah koneksi internet.
-   - Menambahkan timeout pada koneksi WiFiClientSecure.
+    -------------------------------------------------------------
+    PERBAIKAN FINAL:
+    - Mengubah cara pemeriksaan pesan Telegram menjadi non-blocking
+      untuk mencegah program macet jika ada masalah koneksi internet.
+    - Menambahkan timeout pada koneksi WiFiClientSecure.
+    
+    MODIFIKASI TERAKHIR:
+    - Arah servo dibalik (Open = 0, Close = 180).
 */
 
 #include <WiFi.h>
@@ -35,18 +38,24 @@ const char* WIFI_PASS = "Grey12345";
 
 // --- Konfigurasi Server Penerima Gambar & MQTT ---
 // Gunakan domain stabil untuk HTTP API (via Cloudflare Tunnel). MQTT tetap LAN.
-const char* http_server_url = "https://ecotionbuddy.ecotionbuddy.com/iot/camera/upload";
-const char* MQTT_SERVER = "192.168.1.144"; // sesuaikan broker LAN Anda jika berbeda
+const char* http_server_url = "https://ecotionbuddy.ecotionbuddy.com/iot/camera/upload"; // kirim JPEG mentah (POST)
+const char* HTTP_RESULT_URL = "https://ecotionbuddy.ecotionbuddy.com/iot/camera/result";  // kirim event JSON (POST)
+const char* MQTT_SERVER = "192.168.137.1"; // broker MQTT lokal (tetap LAN)
 const int   MQTT_PORT   = 1883;
 const char* MQTT_USER   = "";
 const char* MQTT_PASS   = "";
 const char* MQTT_TOPIC_DEBUG_LOG = "ecotionbuddy/log";
+const char* MQTT_TOPIC_EVENT     = "ecotionbuddy/events/disposal_complete"; // backend subscribe
+
+// Identitas perangkat & bin (ubah sesuai kebutuhan)
+const char* DEVICE_ID = "esp32cam-1";
+const char* BIN_ID    = "bin-001";
 
 // --- Pin Hardware & Perilaku Servo ---
 const int PIN_SERVO = 13;
 const int PIN_IR    = 4;
-const int OPEN_ANGLE  = 180;
-const int CLOSE_ANGLE = 0 ;
+const int OPEN_ANGLE  = 0;    // <-- DIUBAH (Sebelumnya 180)
+const int CLOSE_ANGLE = 180;  // <-- DIUBAH (Sebelumnya 0)
 const unsigned long CLOSE_DELAY_MS = 500;
 const bool IR_ACTIVE_LOW = true;
 
@@ -56,6 +65,10 @@ WiFiClientSecure client;
 UniversalTelegramBot bot(BOT_TOKEN, client);
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
+
+// Session & control state
+String currentSessionId = "";
+unsigned long scheduledCaptureAt = 0; // millis timestamp to trigger takeAndSendPhoto()
 
 enum LidState { STATE_CLOSED, STATE_OPEN, STATE_WAITING_TO_CLOSE };
 LidState currentLidState = STATE_CLOSED;
@@ -75,6 +88,60 @@ void sendLog(String message) {
     mqttClient.publish(MQTT_TOPIC_DEBUG_LOG, message.c_str());
   }
   bot.sendMessage(CHAT_ID, message, "");
+}
+
+// Publish disposal completion event with current session
+void publishDisposalComplete(const char* label) {
+  if (!mqttClient.connected()) return;
+  StaticJsonDocument<256> ev;
+  ev["deviceId"] = DEVICE_ID;
+  ev["binId"] = BIN_ID;
+  ev["label"] = label;
+  ev["confidence"] = 1.0;
+  if (currentSessionId.length() > 0) {
+    ev["sessionId"] = currentSessionId;
+  }
+  char payload[256];
+  size_t n = serializeJson(ev, payload, sizeof(payload));
+  if (mqttClient.publish(MQTT_TOPIC_EVENT, (uint8_t*)payload, n)) {
+    Serial.println("MQTT disposal_complete published");
+  } else {
+    Serial.println("MQTT disposal_complete publish failed");
+  }
+}
+
+// Handle control commands from backend
+void mqttCallback(char* topic, byte* payload, unsigned int length) {
+  String body;
+  body.reserve(length + 1);
+  for (unsigned int i = 0; i < length; i++) body += (char)payload[i];
+  Serial.print("CTRL msg topic="); Serial.print(topic); Serial.print(" body="); Serial.println(body);
+  StaticJsonDocument<256> doc;
+  DeserializationError err = deserializeJson(doc, body);
+  if (err) {
+    Serial.print("CTRL json error: "); Serial.println(err.c_str());
+    return;
+  }
+  const char* action = doc["action"] | "";
+  const char* sid = doc["sessionId"] | "";
+  if (sid && strlen(sid) > 0) {
+    currentSessionId = String(sid);
+  }
+  if (strcmp(action, "activate") == 0) {
+    int countdownMs = doc["countdownMs"] | 3000;
+    scheduledCaptureAt = millis() + (unsigned long)countdownMs;
+    sendLog(String("SESSION activated, photo in ") + String(countdownMs) + " ms");
+  } else if (strcmp(action, "open") == 0) {
+    int angle = doc["angle"] | 180;
+    (void)angle; // we use predefined OPEN_ANGLE
+    openLid();
+    currentLidState = STATE_OPEN;
+    objectDetectedSinceOpen = false;
+    sendLog("CTRL: Lid opened by backend");
+  } else if (strcmp(action, "deactivate") == 0) {
+    currentSessionId = "";
+    sendLog("SESSION deactivated");
+  }
 }
 
 // --- Variabel Global dan Fungsi Callback untuk Streaming Foto ---
@@ -105,17 +172,77 @@ void takeAndSendPhoto() {
     return;
   }
   sendLog("INFO: Gambar diambil. Ukuran: " + String(fb->len) + " bytes");
+  String uploadedUrl = ""; // URL gambar yang dikembalikan backend
+  // Kirim gambar ke backend dengan deviceId & binId dalam query string
   HTTPClient http;
-  // gunakan WiFiClientSecure 'client' agar bisa HTTPS tanpa validasi sertifikat (dev)
-  http.begin(client, http_server_url);
+  String uploadUrl = String(http_server_url) + "?deviceId=" + DEVICE_ID + "&binId=" + BIN_ID;
+  // gunakan WiFiClientSecure 'client' yang sudah setInsecure() untuk HTTPS
+  http.begin(client, uploadUrl);
   http.addHeader("Content-Type", "image/jpeg");
+  http.setTimeout(15000); // perbesar timeout total agar tidak cepat gagal ketika jaringan lambat
   int httpResponseCode = http.POST(fb->buf, fb->len);
   if (httpResponseCode > 0) {
     sendLog("INFO: HTTP POST ke server berhasil (kode: " + String(httpResponseCode) + ")");
+    // Coba baca response JSON dan ambil field `url`
+    String resp = http.getString();
+    StaticJsonDocument<256> respDoc;
+    DeserializationError jerr = deserializeJson(respDoc, resp);
+    if (!jerr) {
+      const char* url = respDoc["url"] | "";
+      if (url && strlen(url) > 0) {
+        uploadedUrl = String(url);
+      }
+    }
   } else {
     sendLog("ERROR: HTTP POST ke server gagal: " + http.errorToString(httpResponseCode));
   }
   http.end();
+
+  // Publikasikan placeholder hasil CNN ke MQTT
+  if (mqttClient.connected()) {
+    StaticJsonDocument<256> ev;
+    ev["deviceId"] = DEVICE_ID;
+    ev["binId"] = BIN_ID;
+    ev["label"] = "placeholder";      // TODO: ganti dengan label model CNN asli
+    ev["confidence"] = 0.0;           // TODO: ganti dengan confidence asli
+    if (uploadedUrl.length() > 0) {
+      ev["imageUrl"] = uploadedUrl;
+    }
+    char payload[256];
+    size_t n = serializeJson(ev, payload, sizeof(payload));
+    if (mqttClient.publish(MQTT_TOPIC_EVENT, (uint8_t*)payload, n)) {
+      Serial.println("MQTT event published");
+    } else {
+      Serial.println("MQTT publish failed");
+    }
+  }
+
+  // Kirim juga event JSON ke backend via HTTP sebagai backup (opsional)
+  {
+    HTTPClient http2;
+    // gunakan WiFiClientSecure 'client' untuk HTTPS
+    http2.begin(client, HTTP_RESULT_URL);
+    http2.addHeader("Content-Type", "application/json");
+    http2.setTimeout(8000); // timeout moderat untuk event JSON
+    StaticJsonDocument<256> ev2;
+    ev2["deviceId"] = DEVICE_ID;
+    ev2["binId"] = BIN_ID;
+    ev2["label"] = "placeholder";
+    ev2["confidence"] = 0.0;
+    if (uploadedUrl.length() > 0) {
+      ev2["imageUrl"] = uploadedUrl;
+    }
+    String body;
+    serializeJson(ev2, body);
+    int code2 = http2.POST(body);
+    if (code2 > 0) {
+      Serial.printf("HTTP JSON result posted: %d\n", code2);
+    } else {
+      Serial.printf("HTTP JSON post failed: %s\n", http2.errorToString(code2).c_str());
+    }
+    http2.end();
+  }
+
   Serial.println("Mengirim foto ke Telegram...");
   fb_for_telegram = fb;
   bytes_sent_for_telegram = 0;
@@ -214,6 +341,11 @@ void manageLidState() {
           closeLid();
           currentLidState = STATE_CLOSED;
           sendLog("STATUS: Tutup ditutup secara otomatis.");
+          // Publish disposal completion when lid closes after an object passed
+          if (objectDetectedSinceOpen) {
+            publishDisposalComplete("compatible");
+            objectDetectedSinceOpen = false;
+          }
         }
       }
       break;
@@ -232,6 +364,10 @@ void maintainMQTTConnection() {
   clientId += String((uint32_t)ESP.getEfuseMac(), HEX);
   if (mqttClient.connect(clientId.c_str(), MQTT_USER, MQTT_PASS)) {
     Serial.println("MQTT connected.");
+    char ctrlTopic[64];
+    snprintf(ctrlTopic, sizeof(ctrlTopic), "ecotionbuddy/ctrl/%s", DEVICE_ID);
+    mqttClient.subscribe(ctrlTopic);
+    Serial.print("MQTT subscribed: "); Serial.println(ctrlTopic);
   } else {
     Serial.print("MQTT connect failed, rc=");
     Serial.println(mqttClient.state());
@@ -294,6 +430,7 @@ void setup() {
   client.setTimeout(10000); // Timeout 10 detik
 
   setupMQTT();
+  mqttClient.setCallback(mqttCallback);
   startCameraServer();
   Serial.print("Camera Web Server Ready! Use 'http://");
   Serial.print(WiFi.localIP());
@@ -302,14 +439,19 @@ void setup() {
   
   // Pindahkan log startup setelah koneksi MQTT berhasil
   if (mqttClient.connect("startupClient")) {
-     sendLog("Sistem EcotionBuddy telah online dan siap menerima perintah.");
-     mqttClient.disconnect();
+      sendLog("Sistem EcotionBuddy telah online dan siap menerima perintah.");
+      mqttClient.disconnect();
   }
 }
 
 void loop() {
   maintainMQTTConnection();
   mqttClient.loop();
+  // Execute scheduled capture if any
+  if (scheduledCaptureAt > 0 && (long)(millis() - scheduledCaptureAt) >= 0) {
+    scheduledCaptureAt = 0;
+    takeAndSendPhoto();
+  }
   
   // PERBAIKAN: Gunakan bot.getUpdates() dengan cara yang lebih aman
   if (millis() > lastTimeBotChecked + botRequestDelay) {
