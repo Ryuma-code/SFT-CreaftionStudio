@@ -46,50 +46,106 @@ class ScanResultActivity : AppCompatActivity() {
             val imageUri = Uri.parse(uriString)
             binding.imageViewResult.setImageURI(imageUri)
             
-            // Simulate AI detection result
-            val detectionResult = createSampleDetection()
+            // Get classification result from intent (from real model inference)
+            val label = intent.getStringExtra("classification_label") ?: "plastic"
+            val confidence = intent.getFloatExtra("classification_confidence", 0.95f)
+            
+            // Map model labels to WasteCategory
+            val category = when (label.lowercase()) {
+                "plastic" -> WasteCategory.PLASTIC
+                "paper" -> WasteCategory.PAPER
+                "glass" -> WasteCategory.GLASS
+                "metal" -> WasteCategory.METAL
+                "cardboard" -> WasteCategory.PAPER
+                else -> WasteCategory.PLASTIC
+            }
+            
+            val suggestions = getSuggestionsForCategory(category)
+            
+            val detectionResult = WasteDetection(
+                id = "detection_${System.currentTimeMillis()}",
+                detectedCategory = category,
+                confidence = confidence,
+                suggestions = suggestions,
+                pointsEarned = calculatePoints(category, confidence)
+            )
             displayDetectionResult(detectionResult)
         }
     }
     
-    private fun createSampleDetection(): WasteDetection {
-        val suggestions = listOf(
-            RecyclingSuggestion(
-                title = getString(R.string.suggestion_plastic_pot_title),
-                description = getString(R.string.suggestion_plastic_pot_desc),
-                steps = listOf(
-                    "Cuci bersih botol plastik",
-                    "Potong bagian atas botol",
-                    "Buat lubang drainase di bagian bawah",
-                    "Hias dengan cat atau kertas warna-warni",
-                    "Isi dengan tanah dan tanaman"
-                ),
-                difficulty = getString(R.string.difficulty_easy),
-                estimatedTime = getString(R.string.time_30_minutes),
-                materialsNeeded = listOf("Gunting", "Cat", "Tanah", "Bibit tanaman")
-            ),
-            RecyclingSuggestion(
-                title = getString(R.string.suggestion_piggy_bank_title),
-                description = getString(R.string.suggestion_piggy_bank_desc),
-                steps = listOf(
-                    "Siapkan botol plastik bersih",
-                    "Buat celah untuk memasukkan uang",
-                    "Hias dengan stiker atau cat",
-                    "Tambahkan tutup yang bisa dibuka tutup"
-                ),
-                difficulty = getString(R.string.difficulty_easy),
-                estimatedTime = getString(R.string.time_20_minutes),
-                materialsNeeded = listOf("Cutter", "Stiker", "Lem")
+    private fun getSuggestionsForCategory(category: WasteCategory): List<RecyclingSuggestion> {
+        return when (category) {
+            WasteCategory.PLASTIC -> listOf(
+                RecyclingSuggestion(
+                    title = "Pot Tanaman dari Botol Plastik",
+                    description = "Ubah botol plastik menjadi pot tanaman yang cantik",
+                    steps = listOf(
+                        "Cuci bersih botol plastik",
+                        "Potong bagian atas botol",
+                        "Buat lubang drainase di bagian bawah",
+                        "Hias dengan cat atau kertas warna-warni",
+                        "Isi dengan tanah dan tanaman"
+                    ),
+                    difficulty = "Mudah",
+                    estimatedTime = "30 menit",
+                    materialsNeeded = listOf("Gunting", "Cat", "Tanah", "Bibit tanaman")
+                )
             )
-        )
-        
-        return WasteDetection(
-            id = "detection_1",
-            detectedCategory = WasteCategory.PLASTIC,
-            confidence = 0.95f,
-            suggestions = suggestions,
-            pointsEarned = 50
-        )
+            WasteCategory.PAPER -> listOf(
+                RecyclingSuggestion(
+                    title = "Kerajinan Origami",
+                    description = "Buat kerajinan cantik dari kertas bekas",
+                    steps = listOf(
+                        "Potong kertas menjadi bentuk persegi",
+                        "Lipat mengikuti pola origami",
+                        "Bentuk sesuai kreativitas"
+                    ),
+                    difficulty = "Sedang",
+                    estimatedTime = "20 menit",
+                    materialsNeeded = listOf("Kertas", "Lem")
+                )
+            )
+            WasteCategory.GLASS -> listOf(
+                RecyclingSuggestion(
+                    title = "Vas Bunga dari Botol Kaca",
+                    description = "Jadikan botol kaca sebagai vas bunga unik",
+                    steps = listOf(
+                        "Bersihkan botol kaca",
+                        "Hias dengan tali atau cat kaca",
+                        "Isi dengan air dan bunga"
+                    ),
+                    difficulty = "Mudah",
+                    estimatedTime = "15 menit",
+                    materialsNeeded = listOf("Tali", "Cat kaca")
+                )
+            )
+            WasteCategory.METAL -> listOf(
+                RecyclingSuggestion(
+                    title = "Tempat Pensil dari Kaleng",
+                    description = "Ubah kaleng bekas menjadi tempat pensil",
+                    steps = listOf(
+                        "Bersihkan kaleng",
+                        "Haluskan tepi yang tajam",
+                        "Hias dengan kertas atau cat"
+                    ),
+                    difficulty = "Mudah",
+                    estimatedTime = "25 menit",
+                    materialsNeeded = listOf("Amplas", "Kertas hias", "Lem")
+                )
+            )
+            else -> emptyList()
+        }
+    }
+    
+    private fun calculatePoints(category: WasteCategory, confidence: Float): Int {
+        val basePoints = when (category) {
+            WasteCategory.PLASTIC -> 50
+            WasteCategory.PAPER -> 30
+            WasteCategory.GLASS -> 40
+            WasteCategory.METAL -> 60
+            else -> 25
+        }
+        return (basePoints * confidence).toInt()
     }
     
     private fun displayDetectionResult(detection: WasteDetection) {

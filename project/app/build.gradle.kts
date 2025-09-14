@@ -1,15 +1,19 @@
+import java.util.Properties
+import java.io.FileInputStream
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     id("kotlin-kapt")
 }
 
-// Load local.properties for secrets (e.g., GEMINI_API_KEY)
-val localProps = java.util.Properties().apply {
-    val f = rootProject.file("local.properties")
-    if (f.exists()) f.inputStream().use { load(it) }
+// Read GEMINI_API_KEY from local.properties
+val localProperties = Properties()
+val localPropertiesFile = rootProject.file("local.properties")
+if (localPropertiesFile.exists()) {
+    localProperties.load(FileInputStream(localPropertiesFile))
 }
-val GEMINI_API_KEY: String = localProps.getProperty("GEMINI_API_KEY", "")
+val geminiApiKey: String = localProperties.getProperty("GEMINI_API_KEY") ?: ""
 
 android {
     namespace = "com.example.ecotionbuddy"
@@ -29,13 +33,14 @@ android {
         }
         // Default to stable public domain so APKs work without IP changes.
         buildConfigField("String", "BASE_URL", "\"https://ecotionbuddy.ecotionbuddy.com/\"")
-        buildConfigField("String", "GEMINI_API_KEY", "\"${GEMINI_API_KEY}\"")
+        buildConfigField("String", "GEMINI_API_KEY", "\"${geminiApiKey}\"")
     }
 
     buildTypes {
         debug {
-            // For Android emulator local dev, 10.0.2.2 maps to host's localhost
-            buildConfigField("String", "BASE_URL", "\"http://10.0.2.2:8000/\"")
+            // Replace with your actual ngrok URL after running: ngrok http 8000
+            buildConfigField("String", "BASE_URL", "\"https://86ac1f1a81ae.ngrok-free.app/\"")
+            // For local testing: buildConfigField("String", "BASE_URL", "\"http://192.168.1.12:8000/\"")
         }
         release {
             isMinifyEnabled = false
@@ -56,6 +61,7 @@ android {
     }
     
     buildFeatures {
+        buildConfig = true
         viewBinding = true
         dataBinding = true
     }
@@ -124,6 +130,9 @@ dependencies {
     // Image Loading
     implementation("com.github.bumptech.glide:glide:4.16.0")
     kapt("com.github.bumptech.glide:compiler:4.16.0")
+    
+    // ML Kit Barcode Scanning
+    implementation("com.google.mlkit:barcode-scanning:17.2.0")
     
     // Testing
     testImplementation(libs.junit)

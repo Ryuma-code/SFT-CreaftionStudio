@@ -33,7 +33,9 @@ services:
       - mqtt
       - mongo
     volumes:
-      - ./backend:/app   # mount source for hot reload
+      - ./backend:/app
+      - ./backend/uploads:/app/uploads
+      - ./model:/app/model
 
 volumes:
   mongo_data:

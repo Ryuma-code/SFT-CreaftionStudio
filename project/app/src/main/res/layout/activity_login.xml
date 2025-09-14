@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="24dp"
+    android:gravity="center"
+    android:background="@color/white">
+
+    <!-- Logo/Icon -->
+    <ImageView
+        android:layout_width="120dp"
+        android:layout_height="120dp"
+        android:layout_marginBottom="32dp"
+        android:src="@mipmap/ic_launcher"
+        android:contentDescription="EcotionBuddy Logo" />
+
+    <!-- Title -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Selamat Datang di EcotionBuddy"
+        android:textSize="24sp"
+        android:textStyle="bold"
+        android:textColor="@color/black"
+        android:layout_marginBottom="8dp"
+        android:gravity="center" />
+
+    <!-- Subtitle -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Masuk untuk mulai berkontribusi pada lingkungan"
+        android:textSize="16sp"
+        android:textColor="@color/black"
+        android:layout_marginBottom="32dp"
+        android:gravity="center" />
+
+    <!-- User ID Input -->
+    <com.google.android.material.textfield.TextInputLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="16dp"
+        android:hint="User ID"
+        app:boxStrokeColor="@color/design_default_color_primary"
+        app:hintTextColor="@color/design_default_color_primary">
+
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/etUserId"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:inputType="text"
+            android:maxLines="1" />
+
+    </com.google.android.material.textfield.TextInputLayout>
+
+    <!-- Name Input -->
+    <com.google.android.material.textfield.TextInputLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="24dp"
+        android:hint="Nama Lengkap"
+        app:boxStrokeColor="@color/design_default_color_primary"
+        app:hintTextColor="@color/design_default_color_primary">
+
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/etName"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:inputType="textPersonName"
+            android:maxLines="1" />
+
+    </com.google.android.material.textfield.TextInputLayout>
+
+    <!-- Login Button -->
+    <Button
+        android:id="@+id/btnLogin"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:text="Masuk"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        android:layout_marginBottom="16dp"
+        android:backgroundTint="@color/design_default_color_primary" />
+
+    <!-- Skip Login Button -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnSkipLogin"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:text="Masuk sebagai Tamu"
+        android:textSize="16sp"
+        app:backgroundTint="@color/gray"
+        app:cornerRadius="8dp"
+        style="@style/Widget.Material3.Button.OutlinedButton"
+        android:layout_marginBottom="16dp" />
+
+    <!-- Register Button -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnRegister"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:text="Daftar Akun Baru"
+        android:textSize="16sp"
+        app:backgroundTint="@color/teal_200"
+        app:cornerRadius="8dp"
+        style="@style/Widget.Material3.Button.OutlinedButton" />
+
+</LinearLayout>

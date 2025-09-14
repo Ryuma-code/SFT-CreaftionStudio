@@ -4,6 +4,8 @@ import android.content.Intent
 import android.os.Bundle
 import android.view.MenuItem
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import com.example.ecotionbuddy.databinding.ActivityAkunBinding
 import com.example.ecotionbuddy.utils.formatWithDots
 
@@ -38,7 +40,7 @@ class AccountActivity : AppCompatActivity() {
         }
 
         binding.menuSettings.setOnClickListener {
-            // Navigate to settings (placeholder)
+            startActivity(Intent(this, SettingsActivity::class.java))
         }
 
         binding.menuPrivacyPolicy.setOnClickListener {
@@ -46,19 +48,40 @@ class AccountActivity : AppCompatActivity() {
         }
 
         binding.menuLogout.setOnClickListener {
-            // Handle logout (placeholder)
+            val preferencesManager = com.example.ecotionbuddy.utils.PreferencesManager(this)
+            preferencesManager.logout()
+            
+            // Navigate back to login
+            val intent = Intent(this, LoginActivity::class.java)
+            intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+            startActivity(intent)
             finish()
         }
     }
 
     private fun loadUserData() {
-        // Load user data from repository
-        // For demo purposes, using static data
+        val preferencesManager = com.example.ecotionbuddy.utils.PreferencesManager(this)
+        val userName = preferencesManager.userName ?: "User"
+        val userEmail = preferencesManager.userEmail ?: "user@email.com"
+        val userId = preferencesManager.userId ?: "guest"
+        
         binding.apply {
-            userName.text = "Muhammad Rafli"
-            userEmail.text = "rafli@email.com"
-            // FIX: Pass the raw integer directly to let the string resource handle formatting.
-            userPoints.text = getString(R.string.total_points_format, 150000)
+            this.userName.text = userName
+            this.userEmail.text = userEmail
+            
+            // Load points from backend
+            loadUserPoints(userId)
+        }
+    }
+    
+    private fun loadUserPoints(userId: String) {
+        lifecycleScope.launch {
+            try {
+                val userResponse = com.example.ecotionbuddy.data.network.RetrofitClient.api.getUser(userId)
+                binding.userPoints.text = getString(R.string.total_points_format, userResponse.points)
+            } catch (e: Exception) {
+                binding.userPoints.text = getString(R.string.total_points_format, 0)
+            }
         }
     }
 

@@ -6,7 +6,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class PreferencesManager @Inject constructor(context: Context) {
+class PreferencesManager(context: Context) {
     
     private val sharedPreferences: SharedPreferences = 
         context.getSharedPreferences("ecotion_prefs", Context.MODE_PRIVATE)
@@ -38,6 +38,21 @@ class PreferencesManager @Inject constructor(context: Context) {
     var notificationsEnabled: Boolean
         get() = sharedPreferences.getBoolean(KEY_NOTIFICATIONS_ENABLED, true)
         set(value) = sharedPreferences.edit().putBoolean(KEY_NOTIFICATIONS_ENABLED, value).apply()
+    
+    fun isLoggedIn(): Boolean {
+        return !userId.isNullOrEmpty()
+    }
+    
+    fun saveUserData(userId: String, userName: String) {
+        this.userId = userId
+        this.userName = userName
+    }
+    
+    fun logout() {
+        userId = null
+        userName = null
+        userEmail = null
+    }
     
     fun clearAll() {
         sharedPreferences.edit().clear().apply()
