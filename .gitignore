@@ -12,6 +12,15 @@ backend/*.log
 .env.*
 *.env
 
+# Uploads and data directories
+backend/uploads/
+backend/model/
+uploads/
+
+# Database data
+data/
+mongo_data/
+
 # === Android (project/) ===
 project/local.properties
 project/.idea/

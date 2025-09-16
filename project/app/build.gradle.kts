@@ -39,8 +39,8 @@ android {
     buildTypes {
         debug {
             // Replace with your actual ngrok URL after running: ngrok http 8000
-            buildConfigField("String", "BASE_URL", "\"https://86ac1f1a81ae.ngrok-free.app/\"")
-            // For local testing: buildConfigField("String", "BASE_URL", "\"http://192.168.1.12:8000/\"")
+            buildConfigField("String", "BASE_URL", "\"https://YOUR_NGROK_URL.ngrok-free.app/\"")
+            // For local testing: buildConfigField("String", "BASE_URL", "\"http://YOUR_LOCAL_IP:8000/\"")
         }
         release {
             isMinifyEnabled = false
