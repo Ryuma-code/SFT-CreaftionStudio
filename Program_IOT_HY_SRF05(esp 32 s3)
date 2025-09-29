@@ -1,0 +1,552 @@
+/* EcotionBuddy - Versi Final Sensor Tunggal Cerdas
+  -------------------------------------------------------------
+  PERUBAHAN:
+  - Mengganti sensor IR dengan sensor ultrasonik HY-SRF05.
+  - Sensor ultrasonik digunakan untuk dua fungsi:
+    1. Mendeteksi sampah yang dibuang saat tutup terbuka.
+    2. Mendeteksi jika tong sampah penuh saat tutup tertutup.
+  - Jarak deteksi diatur menjadi 20 cm.
+  - Kondisi 'penuh' tercapai jika objek terdeteksi non-stop selama 30 detik.
+  -------------------------------------------------------------
+*/
+
+#include <WiFi.h>
+#include <WiFiClientSecure.h>
+#include <UniversalTelegramBot.h>
+#include <ArduinoJson.h>
+#include <HTTPClient.h>
+#include <ESP32Servo.h>
+#include <PubSubClient.h>
+#include "esp_camera.h"
+#include "soc/soc.h"
+#include "soc/rtc_cntl_reg.h"
+
+// --- DEFINISI MODEL KAMERA ---
+// Ganti ke model yang sesuai jika perlu, misal: #define CAMERA_MODEL_ESP32S3_EYE
+#define CAMERA_MODEL_AI_THINKER
+#include "camera_pins.h"
+
+// Deklarasi fungsi dari file app_httpd.cpp
+void startCameraServer();
+
+// -------- KONFIGURASI ----------
+const char* WIFI_SSID = "GREY";
+const char* WIFI_PASS = "Grey12345";
+
+// --- Konfigurasi Telegram ---
+#define BOT_TOKEN "8462729221:AAGTxIl5sWVp_tsq-DOCEM7yxpOhNd53bcU"
+#define CHAT_ID "6889536350"
+
+// --- Konfigurasi Server & MQTT ---
+const char* http_server_url = "https://ecotionbuddy.ecotionbuddy.com/iot/camera/upload";
+const char* HTTP_RESULT_URL = "https://ecotionbuddy.ecotionbuddy.com/iot/camera/result";
+const char* MQTT_SERVER = "192.168.137.252";
+const int   MQTT_PORT   = 1883;
+const char* MQTT_USER   = "";
+const char* MQTT_PASS   = "";
+const char* MQTT_TOPIC_DEBUG_LOG = "ecotionbuddy/log";
+const char* MQTT_TOPIC_EVENT     = "ecotionbuddy/events/disposal_complete";
+
+// --- Identitas Perangkat ---
+const char* DEVICE_ID = "esp32cam-1";
+const char* BIN_ID    = "bin-001";
+
+// --- Pin Hardware & Perilaku Servo ---
+const int PIN_SERVO = 13;
+const int PIN_TRIG_ULTRASONIC = 4;  // Ganti pin Trig jika perlu
+const int PIN_ECHO_ULTRASONIC = 12; // Ganti pin Echo jika perlu
+const int OPEN_ANGLE  = 90;
+const int CLOSE_ANGLE = 0;
+const unsigned long CLOSE_DELAY_MS = 1500; // Waktu tunggu sebelum tutup otomatis
+
+// --- Parameter Deteksi Sensor ---
+const int JARAK_DETEKSI_CM = 15;     // Jarak deteksi untuk sampah & kondisi penuh
+const unsigned long DURASI_PENUH_MS = 30000; // 30 detik untuk konfirmasi tong penuh
+
+// ---------------- Globals ----------------
+Servo servoMotor;
+WiFiClientSecure client;
+UniversalTelegramBot bot(BOT_TOKEN, client);
+WiFiClient espClient;
+PubSubClient mqttClient(espClient);
+
+// --- State Management ---
+String currentSessionId = "";
+unsigned long scheduledCaptureAt = 0;
+
+enum LidState { STATE_CLOSED, STATE_OPEN, STATE_WAITING_TO_CLOSE };
+LidState currentLidState = STATE_CLOSED;
+unsigned long stateChangeTimestamp = 0;
+bool objectDetectedSinceOpen = false;
+
+bool isBinFull = false; // Status tong penuh
+unsigned long fullStateTimestamp = 0; // Timer untuk deteksi penuh
+
+const unsigned long PHOTO_COOLDOWN_MS = 600;
+unsigned long lastPhotoTimestamp = 0;
+
+int botRequestDelay = 10;
+unsigned long lastTimeBotChecked;
+
+// --- FUNGSI LOGGING TERPUSAT (Serial, MQTT, Telegram) ---
+void sendLog(String message) {
+  Serial.println(message);
+  if (mqttClient.connected()) {
+    mqttClient.publish(MQTT_TOPIC_DEBUG_LOG, message.c_str());
+  }
+  bot.sendMessage(CHAT_ID, message, "");
+}
+
+// --- FUNGSI SENSOR ULTRASONIK ---
+long readUltrasonicDistance() {
+  digitalWrite(PIN_TRIG_ULTRASONIC, LOW);
+  delayMicroseconds(2);
+  digitalWrite(PIN_TRIG_ULTRASONIC, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(PIN_TRIG_ULTRASONIC, LOW);
+  long duration = pulseIn(PIN_ECHO_ULTRASONIC, HIGH, 30000); // Timeout 30ms
+  return (duration * 0.0343) / 2;
+}
+
+
+// --- FUNGSI KONTROL TUTUP ---
+void openLid() {
+    servoMotor.write(OPEN_ANGLE);
+    currentLidState = STATE_OPEN;
+    objectDetectedSinceOpen = false; // Reset status deteksi setiap kali tutup dibuka
+    sendLog("STATUS: Tutup dibuka.");
+}
+
+void closeLid() {
+    servoMotor.write(CLOSE_ANGLE);
+    currentLidState = STATE_CLOSED;
+    sendLog("STATUS: Tutup ditutup.");
+}
+
+
+// Publish disposal completion event
+void publishDisposalComplete(const char* label) {
+  if (!mqttClient.connected()) return;
+  StaticJsonDocument<256> ev;
+  ev["deviceId"] = DEVICE_ID;
+  ev["binId"] = BIN_ID;
+  ev["label"] = label;
+  ev["confidence"] = 1.0;
+  if (currentSessionId.length() > 0) {
+    ev["sessionId"] = currentSessionId;
+  }
+  char payload[256];
+  size_t n = serializeJson(ev, payload, sizeof(payload));
+  if (mqttClient.publish(MQTT_TOPIC_EVENT, (uint8_t*)payload, n)) {
+    Serial.println("MQTT disposal_complete published");
+  } else {
+    Serial.println("MQTT disposal_complete publish failed");
+  }
+}
+
+// Handle control commands from backend
+void mqttCallback(char* topic, byte* payload, unsigned int length) {
+  String body;
+  body.reserve(length + 1);
+  for (unsigned int i = 0; i < length; i++) body += (char)payload[i];
+  Serial.print("CTRL msg topic="); Serial.print(topic); Serial.print(" body="); Serial.println(body);
+  StaticJsonDocument<256> doc;
+  DeserializationError err = deserializeJson(doc, body);
+  if (err) {
+    Serial.print("CTRL json error: "); Serial.println(err.c_str());
+    return;
+  }
+  const char* action = doc["action"] | "";
+  const char* sid = doc["sessionId"] | "";
+  if (sid && strlen(sid) > 0) {
+    currentSessionId = String(sid);
+  }
+  if (strcmp(action, "activate") == 0) {
+    int countdownMs = doc["countdownMs"] | 3000;
+    scheduledCaptureAt = millis() + (unsigned long)countdownMs;
+    sendLog(String("SESSION activated, photo in ") + String(countdownMs) + " ms");
+  } else if (strcmp(action, "open") == 0) {
+    if (isBinFull) {
+        sendLog("INFO: Perintah 'buka' dari backend ditolak, tong sampah penuh.");
+        return;
+    }
+    openLid();
+  } else if (strcmp(action, "deactivate") == 0) {
+    currentSessionId = "";
+    sendLog("SESSION deactivated");
+  }
+}
+
+// --- Variabel Global dan Fungsi Callback untuk Streaming Foto ---
+camera_fb_t *fb_for_telegram = NULL;
+int bytes_sent_for_telegram = 0;
+
+bool moreDataAvailable() {
+  if (fb_for_telegram != NULL && bytes_sent_for_telegram < fb_for_telegram->len) return true;
+  return false;
+}
+
+byte getNextByte() {
+  if (moreDataAvailable()) return fb_for_telegram->buf[bytes_sent_for_telegram++];
+  return 0;
+}
+
+// --- FUNGSI PENGIRIMAN FOTO (HTTP & Telegram) ---
+void takeAndSendPhoto() {
+  if (millis() - lastPhotoTimestamp < PHOTO_COOLDOWN_MS) {
+    sendLog("Cooldown foto aktif, coba lagi nanti.");
+    return;
+  }
+  lastPhotoTimestamp = millis();
+  sendLog("Mengambil gambar...");
+  camera_fb_t* fb = esp_camera_fb_get();
+  if (!fb) {
+    sendLog("ERROR: Gagal mengambil gambar dari kamera.");
+    return;
+  }
+  sendLog("INFO: Gambar diambil. Ukuran: " + String(fb->len) + " bytes");
+  String uploadedUrl = "";
+  HTTPClient http;
+  String uploadUrl = String(http_server_url) + "?deviceId=" + DEVICE_ID + "&binId=" + BIN_ID;
+  http.begin(client, uploadUrl);
+  http.addHeader("Content-Type", "image/jpeg");
+  http.setTimeout(15000);
+  int httpResponseCode = http.POST(fb->buf, fb->len);
+  if (httpResponseCode > 0) {
+    sendLog("INFO: HTTP POST ke server berhasil (kode: " + String(httpResponseCode) + ")");
+    String resp = http.getString();
+    StaticJsonDocument<256> respDoc;
+    DeserializationError jerr = deserializeJson(respDoc, resp);
+    if (!jerr) {
+      const char* url = respDoc["url"] | "";
+      if (url && strlen(url) > 0) {
+        uploadedUrl = String(url);
+      }
+    }
+  } else {
+    sendLog("ERROR: HTTP POST ke server gagal: " + http.errorToString(httpResponseCode));
+  }
+  http.end();
+
+  if (mqttClient.connected()) {
+    StaticJsonDocument<256> ev;
+    ev["deviceId"] = DEVICE_ID;
+    ev["binId"] = BIN_ID;
+    ev["label"] = "placeholder";
+    ev["confidence"] = 0.0;
+    if (uploadedUrl.length() > 0) {
+      ev["imageUrl"] = uploadedUrl;
+    }
+    char payload[256];
+    size_t n = serializeJson(ev, payload, sizeof(payload));
+    if (mqttClient.publish(MQTT_TOPIC_EVENT, (uint8_t*)payload, n)) {
+      Serial.println("MQTT event published");
+    } else {
+      Serial.println("MQTT publish failed");
+    }
+  }
+
+  {
+    HTTPClient http2;
+    http2.begin(client, HTTP_RESULT_URL);
+    http2.addHeader("Content-Type", "application/json");
+    http2.setTimeout(8000);
+    StaticJsonDocument<256> ev2;
+    ev2["deviceId"] = DEVICE_ID;
+    ev2["binId"] = BIN_ID;
+    ev2["label"] = "placeholder";
+    ev2["confidence"] = 0.0;
+    if (uploadedUrl.length() > 0) {
+      ev2["imageUrl"] = uploadedUrl;
+    }
+    String body;
+    serializeJson(ev2, body);
+    int code2 = http2.POST(body);
+    if (code2 > 0) {
+      Serial.printf("HTTP JSON result posted: %d\n", code2);
+    } else {
+      Serial.printf("HTTP JSON post failed: %s\n", http2.errorToString(code2).c_str());
+    }
+    http2.end();
+  }
+
+  Serial.println("Mengirim foto ke Telegram...");
+  fb_for_telegram = fb;
+  bytes_sent_for_telegram = 0;
+  String response = bot.sendMultipartFormDataToTelegram("sendPhoto", "photo", "esp32-cam.jpg", "image/jpeg", CHAT_ID, fb->len, moreDataAvailable, getNextByte, nullptr, nullptr);
+  if (response.indexOf("\"ok\":true") > 0) {
+    bot.sendMessage(CHAT_ID, "Foto dari EcotionBuddy.", "");
+    sendLog("INFO: Foto berhasil dikirim ke Telegram.");
+  } else {
+    sendLog("ERROR: Gagal mengirim foto ke Telegram. Respons: " + response);
+  }
+  fb_for_telegram = NULL;
+  esp_camera_fb_return(fb);
+}
+
+
+// --- FUNGSI PENANGANAN PESAN TELEGRAM ---
+void handleNewMessages(int numNewMessages) {
+  for (int i = 0; i < numNewMessages; i++) {
+    String chat_id = String(bot.messages[i].chat_id);
+    if (chat_id != CHAT_ID) {
+      bot.sendMessage(chat_id, "Maaf, Anda tidak diizinkan menggunakan bot ini.", "");
+      continue;
+    }
+    String text = bot.messages[i].text;
+    String from_name = bot.messages[i].from_name;
+    if (text == "/start") {
+      String welcome = "Selamat datang, " + from_name + ".\n";
+      welcome += "Ini adalah Bot Kontrol EcotionBuddy.\n\n";
+      welcome += "/buka : Membuka tutup tempat sampah.\n";
+      welcome += "/tutup : Menutup paksa tutup.\n";
+      welcome += "/foto : Mengambil foto manual.\n";
+      welcome += "/status : Cek status terkini.\n";
+      bot.sendMessage(CHAT_ID, welcome, "");
+    }
+    if (text == "/buka") {
+      if (isBinFull) {
+        bot.sendMessage(CHAT_ID, "⚠️ PERINGATAN: Tong sampah penuh, tidak bisa dibuka.", "");
+        continue;
+      }
+      if (currentLidState == STATE_CLOSED) {
+        openLid();
+        sendLog("STATUS: Tutup dibuka berdasarkan perintah dari " + from_name + ".");
+      } else {
+        bot.sendMessage(CHAT_ID, "INFO: Tutup sudah dalam keadaan terbuka.", "");
+      }
+    }
+    if (text == "/tutup") {
+      if (currentLidState != STATE_CLOSED) {
+        closeLid();
+        sendLog("STATUS: Tutup ditutup paksa oleh " + from_name + ".");
+      } else {
+        bot.sendMessage(CHAT_ID, "INFO: Tutup sudah dalam keadaan tertutup.", "");
+      }
+    }
+    if (text == "/foto") { takeAndSendPhoto(); }
+    if (text == "/status") {
+      char statusMsg[256];
+      const char* lidStateStr;
+      if (currentLidState == STATE_OPEN) lidStateStr = "TERBUKA";
+      else if (currentLidState == STATE_CLOSED) lidStateStr = "TERTUTUP";
+      else if (currentLidState == STATE_WAITING_TO_CLOSE) lidStateStr = "MENUNGGU UNTUK MENUTUP";
+      else lidStateStr = "TIDAK DIKETAHUI";
+
+      snprintf(statusMsg, sizeof(statusMsg),
+               "STATUS TERKINI:\n"
+               "Alamat IP: http://%s\n"
+               "Koneksi MQTT: %s\n"
+               "Status Tutup: %s\n"
+               "Status Tong: %s",
+               WiFi.localIP().toString().c_str(),
+               mqttClient.connected() ? "Terhubung" : "Terputus",
+               lidStateStr,
+               isBinFull ? "PENUH" : "TIDAK PENUH"
+      );
+      bot.sendMessage(CHAT_ID, statusMsg, "");
+    }
+  }
+}
+
+// --- LOGIKA UTAMA PENGELOLAAN TUTUP (DETEKSI SAMPAH) ---
+void manageLidState() {
+  if (currentLidState == STATE_CLOSED) return; // Hanya berjalan jika tutup tidak tertutup
+
+  long distance = readUltrasonicDistance();
+  bool detected = (distance > 0 && distance < JARAK_DETEKSI_CM);
+
+  switch (currentLidState) {
+    case STATE_OPEN:
+      if (detected && !objectDetectedSinceOpen) {
+        sendLog("EVENT: Sampah terdeteksi, mengambil foto...");
+        takeAndSendPhoto();
+        objectDetectedSinceOpen = true;
+      }
+      if (!detected && objectDetectedSinceOpen) {
+        sendLog("EVENT: Sampah sudah masuk, memulai timer penutupan.");
+        currentLidState = STATE_WAITING_TO_CLOSE;
+        stateChangeTimestamp = millis();
+      }
+      break;
+
+    case STATE_WAITING_TO_CLOSE:
+      if (detected) {
+        sendLog("EVENT: Objek terdeteksi lagi, timer penutupan direset.");
+        currentLidState = STATE_OPEN; // Kembali ke state OPEN agar timer tidak jalan
+      } else {
+        if (millis() - stateChangeTimestamp > CLOSE_DELAY_MS) {
+          closeLid();
+          if (objectDetectedSinceOpen) {
+            publishDisposalComplete("compatible");
+          }
+        }
+      }
+      break;
+    
+    case STATE_CLOSED:
+      // Tidak melakukan apa-apa di state ini
+      break;
+  }
+}
+
+// --- LOGIKA UTAMA PENDETEKSI TONG PENUH ---
+void manageFullState() {
+    if (isBinFull || currentLidState != STATE_CLOSED) {
+        // Jangan cek jika sudah penuh atau jika tutup sedang terbuka/menunggu
+        return;
+    }
+
+    long distance = readUltrasonicDistance();
+    bool isNear = (distance > 0 && distance < JARAK_DETEKSI_CM);
+
+    if (isNear) {
+        if (fullStateTimestamp == 0) {
+            // Ini adalah deteksi pertama, mulai timer
+            fullStateTimestamp = millis();
+            Serial.println("Deteksi 'penuh' dimulai, timer berjalan...");
+        } else {
+            // Timer sudah berjalan, cek apakah durasi 30 detik sudah tercapai
+            if (millis() - fullStateTimestamp > DURASI_PENUH_MS) {
+                isBinFull = true;
+                fullStateTimestamp = 0; // Reset timer
+                sendLog("⚠️ PERINGATAN: Tong Sampah terdeteksi PENUH!");
+            }
+        }
+    } else {
+        // Tidak ada objek terdeteksi, reset timer
+        fullStateTimestamp = 0;
+    }
+}
+
+
+// --- FUNGSI KONEKSI MQTT ---
+void setupMQTT() { mqttClient.setServer(MQTT_SERVER, MQTT_PORT); }
+
+void maintainMQTTConnection() {
+  if (mqttClient.connected()) return;
+  unsigned long now = millis();
+  static unsigned long lastAttempt = 0;
+  if (now - lastAttempt < 5000) return;
+  lastAttempt = now;
+  String clientId = "ecotionbuddy-logger-";
+  clientId += String((uint32_t)ESP.getEfuseMac(), HEX);
+  if (mqttClient.connect(clientId.c_str(), MQTT_USER, MQTT_PASS)) {
+    Serial.println("MQTT connected.");
+    char ctrlTopic[64];
+    snprintf(ctrlTopic, sizeof(ctrlTopic), "ecotionbuddy/ctrl/%s", DEVICE_ID);
+    mqttClient.subscribe(ctrlTopic);
+    Serial.print("MQTT subscribed: "); Serial.println(ctrlTopic);
+  } else {
+    Serial.print("MQTT connect failed, rc=");
+    Serial.println(mqttClient.state());
+  }
+}
+
+// --- SETUP ---
+void setup() {
+  WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);
+  Serial.begin(115200);
+  Serial.setDebugOutput(true);
+  Serial.println("\n\n=== EcotionBuddy (Sensor Tunggal Cerdas) ===");
+
+  pinMode(PIN_TRIG_ULTRASONIC, OUTPUT);
+  pinMode(PIN_ECHO_ULTRASONIC, INPUT);
+  
+  servoMotor.attach(PIN_SERVO, 500, 2500);
+  closeLid();
+  
+  camera_config_t config;
+  config.ledc_channel = LEDC_CHANNEL_0;
+  config.ledc_timer = LEDC_TIMER_0;
+  config.pin_d0 = Y2_GPIO_NUM;
+  config.pin_d1 = Y3_GPIO_NUM;
+  config.pin_d2 = Y4_GPIO_NUM;
+  config.pin_d3 = Y5_GPIO_NUM;
+  config.pin_d4 = Y6_GPIO_NUM;
+  config.pin_d5 = Y7_GPIO_NUM;
+  config.pin_d6 = Y8_GPIO_NUM;
+  config.pin_d7 = Y9_GPIO_NUM;
+  config.pin_xclk = XCLK_GPIO_NUM;
+  config.pin_pclk = PCLK_GPIO_NUM;
+  config.pin_vsync = VSYNC_GPIO_NUM;
+  config.pin_href = HREF_GPIO_NUM;
+  config.pin_sccb_sda = SIOD_GPIO_NUM;
+  config.pin_sccb_scl = SIOC_GPIO_NUM;
+  config.pin_pwdn = PWDN_GPIO_NUM;
+  config.pin_reset = RESET_GPIO_NUM;
+  config.xclk_freq_hz = 20000000;
+  config.pixel_format = PIXFORMAT_JPEG;
+  config.frame_size = FRAMESIZE_SVGA;
+  config.jpeg_quality = 12;
+  config.fb_count = 2;
+  config.grab_mode = CAMERA_GRAB_LATEST;
+  config.fb_location = CAMERA_FB_IN_PSRAM;
+
+  esp_err_t err = esp_camera_init(&config);
+  if (err != ESP_OK) {
+    Serial.printf("Camera init failed with error 0x%x", err);
+    return;
+  }
+  Serial.println("Camera initialized successfully.");
+  
+  WiFi.begin(WIFI_SSID, WIFI_PASS);
+  Serial.print("WiFi connecting");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("\nWiFi connected");
+  
+  client.setInsecure();
+  client.setTimeout(10000);
+
+  setupMQTT();
+  mqttClient.setCallback(mqttCallback);
+  startCameraServer();
+  Serial.print("Camera Web Server Ready! Use 'http://");
+  Serial.print(WiFi.localIP());
+  Serial.println("' to connect");
+  Serial.println("Sistem tempat sampah otomatis aktif.");
+  
+  if (mqttClient.connect("startupClient")) {
+      sendLog("Sistem EcotionBuddy telah online dan siap menerima perintah.");
+      mqttClient.disconnect();
+  }
+}
+
+// --- LOOP ---
+void loop() {
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("Koneksi WiFi terputus. Mencoba menyambung kembali...");
+    WiFi.reconnect(); // Coba sambung ulang
+    delay(1000);
+    return;
+  }
+
+  maintainMQTTConnection();
+  mqttClient.loop();
+  
+  if (scheduledCaptureAt > 0 && (long)(millis() - scheduledCaptureAt) >= 0) {
+    scheduledCaptureAt = 0;
+    takeAndSendPhoto();
+  }
+  
+  if (millis() > lastTimeBotChecked + botRequestDelay) {
+    if (bot.getMe()) {
+      int numNewMessages = bot.getUpdates(bot.last_message_received + 1);
+      while (numNewMessages) {
+        handleNewMessages(numNewMessages);
+        numNewMessages = bot.getUpdates(bot.last_message_received + 1);
+      }
+    } else {
+      Serial.println("Gagal terhubung ke server Telegram.");
+    }
+    lastTimeBotChecked = millis();
+  }
+  
+  manageLidState();  // Menjalankan logika deteksi sampah
+  manageFullState(); // Menjalankan logika deteksi tong penuh
+  
+  delay(50);
+}
